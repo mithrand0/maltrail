@@ -29,6 +29,10 @@ FROM python:3.14-slim-trixie
 ENV VENV="/opt/maltrail"
 ENV PATH="${VENV}/bin:${PATH}"
 
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONWARNINGS=ignore \
+    DEBIAN_FRONTEND=noninteractive
+
 # Workdir
 WORKDIR ${VENV}
 
@@ -50,28 +54,18 @@ COPY server.py server.py
 # Initial update of trails
 RUN python core/update.py
 
+# Store those trails outside of the container for initial startup
+RUN mv /root/.maltrail /root/.maltrail-dist
+
 # Install required packages
-RUN --mount=type=cache,target=/var/lib/apt apt -qq update && apt -y install libpcap0.8t64 procps xz-utils
+RUN --mount=type=cache,target=/var/lib/apt apt -qq update && apt -y install libpcap0.8t64 schedtool tini
 
-# S6 overlay
-ARG S6_OVERLAY_VERSION=3.2.3.0
+# Keep things compatible with the compose instructions'
+COPY docker/start.sh /start.sh
 
-ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz /tmp
-RUN tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz
-ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-x86_64.tar.xz /tmp
-RUN tar -C / -Jxpf /tmp/s6-overlay-x86_64.tar.xz
-
-# Copy S6 service definitions
-COPY docker/etc/services.d /etc/services.d
-
-# To keep this compatible with existing docker-compose instructions
-COPY docker/compat.sh /compat.sh
-RUN chmod +x /compat.sh
-ENV S6_CMD_ARG0="/compat.sh"
-
-# Places where maltrail writes
-VOLUME /var/log/maltrail
+# Places where maltrail writes files
 VOLUME /root/.maltrail
+VOLUME /var/log/maltrail
 
 # Run a very simple test if everything works
 RUN python server.py --version
@@ -81,5 +75,5 @@ RUN python sensor.py --version
 EXPOSE 8337/udp
 EXPOSE 8338/tcp
 
-# S6 entrypoint
-ENTRYPOINT ["/init"]
+# entrypoint
+ENTRYPOINT ["/usr/bin/tini", "--", "/start.sh"]
