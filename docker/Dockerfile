@@ -1,47 +1,79 @@
-FROM python:3
+###############
+# build image #
+###############
+FROM python:3.14-trixie AS build
 
-# Workdir and metadata
-WORKDIR /opt/maltrail
+# Other environment variables
+ENV VENV="/opt/maltrail"
+ENV PATH="${VENV}/bin:${PATH}"
 
-# Environment variables
+# Pypcap-ng
+RUN --mount=type=cache,target=/var/lib/apt apt -qq update && apt -y install libpcap-dev
+
+# Virtualenv
+RUN python -m venv $VENV
+
+# Switch to working directory
+WORKDIR ${VENV}
+
+# Pip
+COPY requirements.txt ./
+RUN pip install -r requirements.txt
+
+####################
+# production image #
+####################
+FROM python:3.14-slim-trixie
+
+# Env
+ENV VENV="/opt/maltrail"
+ENV PATH="${VENV}/bin:${PATH}"
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONWARNINGS=ignore \
     DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies, update apt packages, clear apt cache
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends libpcap-dev cron tini && \
-    rm -rf /var/lib/apt/lists/*
+# Workdir
+WORKDIR ${VENV}
 
-# Copy requirements.txt separately to leverage Docker cache
-COPY ../requirements.txt ./
+# Copy maltrail dependencies from build container
+COPY --from=build ${VENV} ${VENV}
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy required maltrail directories and files
+COPY core core
+COPY html html
+COPY misc misc
+COPY plugins plugins
+COPY thirdparty thirdparty
+COPY trails trails
+COPY maltrail.conf maltrail.conf
 
-# Copy project
-COPY . .
-
-# Copy the start script and make it executable
-COPY docker/start.sh /opt/maltrail/start.sh
-RUN chmod +x /opt/maltrail/start.sh
-
-# Re-route log output from a file to stdout, also create log file for cron
-RUN ln -sf /dev/stdout /var/log/maltrail.log && \
-    ln -sf /dev/stdout /var/log/cron.log
+COPY sensor.py sensor.py
+COPY server.py server.py
 
 # Initial update of trails
-RUN python /opt/maltrail/core/update.py
+RUN python core/update.py
 
-# Update trails daily
-RUN echo '0 1 * * * /opt/maltrail/core/update.py >> /var/log/cron.log 2>&1' | crontab
+# Store those trails outside of the container for initial startup
+RUN mv /root/.maltrail /root/.maltrail-dist
+
+# Install required packages
+RUN --mount=type=cache,target=/var/lib/apt apt -qq update && apt -y install libpcap0.8t64 schedtool tini
+
+# Keep things compatible with the compose instructions'
+COPY docker/start.sh /start.sh
+
+# Places where maltrail writes files
+VOLUME /root/.maltrail
+VOLUME /var/log/maltrail
+
+# Run a very simple test if everything works
+RUN python server.py --version
+RUN python sensor.py --version
 
 # Expose server ports
 EXPOSE 8337/udp
 EXPOSE 8338/tcp
 
-# Set tini as entrypoint to handle cron and maltrail process
-ENTRYPOINT ["/usr/bin/tini", "--"]
-
-# Execute start.sh to start cron and maltrail
-CMD ["/opt/maltrail/start.sh"]
+# entrypoint
+ENTRYPOINT ["/usr/bin/tini", "--", "/start.sh"]
