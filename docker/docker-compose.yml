@@ -1,10 +1,8 @@
 services:
 
   # sensor:
+  #   image: maltrail/maltrail:latest
   #   container_name: maltrail-sensor
-  #   build:
-  #     context: ..
-  #     dockerfile: docker/Dockerfile
   #   command: sensor.py
   #   restart: unless-stopped
   #   network_mode: host
@@ -14,13 +12,27 @@ services:
   #     - "/etc/maltrail.conf:/opt/maltrail/maltrail.conf:ro"
   #     - "/var/log/maltrail:/var/log/maltrail"
     
-  server:
-    container_name: maltrail-server
+  # server:
+  #   image: maltrail/maltrail:latest
+  #   container_name: maltrail-server
+  #   command: server.py
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8338:8338/tcp"
+  #     - "8337:8337/udp"
+  #   volumes:
+  #     - "/etc/localtime:/etc/localtime:ro"
+  #     # - "/etc/maltrail.conf:/opt/maltrail/maltrail.conf:ro"
+  #     # - "/var/log/maltrail:/var/log/maltrail"
+
+  combined:
+    container_name: maltrail
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    command: server.py
     restart: unless-stopped
+    network_mode: host
+    privileged: true
     ports:
       - "8338:8338/tcp"
       - "8337:8337/udp"
