@@ -1,7 +1,16 @@
 #!/command/with-contenv bash
-set -e
 
-echo "starting maltrail sensor.."
+pid=$(pgrep -f 'run/s6/basedir/scripts/rc.init top (server)|(sensor).py')
+
+if [[ ${pid} != "" ]]; then
+    echo "s6-service [maltrail-sensor]: maltrail has been started by docker command, skipping starting service.."
+    tail -f /dev/null
+fi
 
 cd ${VENV}
-python sensor.py
+
+# wait a bit, to keep the logs clean of the container 
+sleep 2
+
+echo "starting maltrail sensor.."
+python -u sensor.py
