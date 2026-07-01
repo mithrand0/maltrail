@@ -62,7 +62,7 @@ RUN tar -C / -Jxpf /tmp/s6-overlay-x86_64.tar.xz
 COPY docker/etc/services.d /etc/services.d
 
 # Initial update of trails
-#RUN python core/update.py
+RUN python core/update.py
 
 # To keep this compatible with existing docker-compose instructions
 RUN ln -sf /opt/maltrail/server.py /usr/local/bin/server.py \
