@@ -47,8 +47,11 @@ COPY maltrail.conf maltrail.conf
 COPY sensor.py sensor.py
 COPY server.py server.py
 
+# Initial update of trails
+RUN python core/update.py
+
 # Install required packages
-RUN --mount=type=cache,target=/var/lib/apt apt -qq update && apt -y install libpcap0.8t64 xz-utils
+RUN --mount=type=cache,target=/var/lib/apt apt -qq update && apt -y install libpcap0.8t64 procps xz-utils
 
 # S6 overlay
 ARG S6_OVERLAY_VERSION=3.2.3.0
@@ -61,17 +64,14 @@ RUN tar -C / -Jxpf /tmp/s6-overlay-x86_64.tar.xz
 # Copy S6 service definitions
 COPY docker/etc/services.d /etc/services.d
 
-# Initial update of trails
-RUN python core/update.py
-
 # To keep this compatible with existing docker-compose instructions
-RUN ln -sf /opt/maltrail/server.py /usr/local/bin/server.py \
-    && ln -sf /opt/maltrail/sensor.py /usr/local/bin/sensor.py \
-    && chmod +x sensor.py server.py
+COPY docker/compat.sh /compat.sh
+RUN chmod +x /compat.sh
+ENV S6_CMD_ARG0="/compat.sh"
 
 # Places where maltrail writes
 VOLUME /var/log/maltrail
-VOLUME /root/.maltrail 
+VOLUME /root/.maltrail
 
 # Run a very simple test if everything works
 RUN python server.py --version
